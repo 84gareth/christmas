@@ -232,7 +232,7 @@ h1,h2,.festive{font-family:"Mountains of Christmas",Georgia,serif;font-weight:70
 /* ============================================================
    The Family Christmas List
    ============================================================ */
-const VERSION = '1.0.4';
+const VERSION = '1.1.0';
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBRPZgESoFpIrDzE50Jiav6hdtLWFOoWWM",
@@ -271,7 +271,9 @@ const $ = (s) => document.querySelector(s);
 const byName = (n) => PEOPLE.find((p) => p.name === n);
 const isKid = (n) => !byName(n)?.adult;
 const partnerOf = (n) => byName(n)?.partner || null;
-const canEdit = (viewer, owner) => viewer === owner || !!byName(owner)?.managedBy?.includes(viewer);
+const isManaged = (n) => !!byName(n)?.managedBy;
+const NO_PIN = 'no-pin';
+const canEdit = (viewer, owner) => (viewer === owner && !isManaged(owner)) || !!byName(owner)?.managedBy?.includes(viewer);
 const canSeeBought = (viewer, owner) => viewer !== owner && !isKid(viewer);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -611,8 +613,8 @@ function onData(d) {
   S.metaChecked = true;
   const saved = getSession();
   if (S.me) {
-    if (!saved || S.people[S.me]?.pinHash !== saved.hash) { S.me = null; setSession(null); S.view = 'login'; toast('Your PIN was reset. Please sign in again.', true); }
-  } else if (saved && byName(saved.name) && S.people[saved.name]?.pinHash === saved.hash && S.view === 'loading') {
+    if (!saved || (!isManaged(S.me) && S.people[S.me]?.pinHash !== saved.hash)) { S.me = null; setSession(null); S.view = 'login'; toast('Your PIN was reset. Please sign in again.', true); }
+  } else if (saved && byName(saved.name) && (isManaged(saved.name) ? saved.hash === NO_PIN : S.people[saved.name]?.pinHash === saved.hash) && S.view === 'loading') {
     S.me = saved.name; S.view = 'home';
   }
   if (S.view === 'loading') S.view = 'login';
@@ -657,7 +659,7 @@ function personButton(p) {
 }
 function viewLogin() {
   const adults = PEOPLE.filter((p) => p.adult);
-  const kids = PEOPLE.filter((p) => !p.adult && !p.managedBy);
+  const kids = PEOPLE.filter((p) => !p.adult);
   return `${lights()}
     <h1 class="title">The Family<br>Christmas List</h1>
     <p class="countdown">${countdownHTML()}</p>
@@ -732,7 +734,7 @@ function viewHome() {
     : '';
   return `${topbar('home')}${notices}
     <button class="card mine" data-act="open" data-owner="${esc(me)}">${bauble(byName(me), 56)}
-      <span class="ct"><b>My wishlist</b><small>${mine.length ? plural(mine.length, 'wish', 'wishes') + ' · tap to add or sort' : 'Tap here to write your first wish'}</small></span>${I.chev.replace('<svg', '<svg class="chev"')}</button>
+      <span class="ct"><b>My wishlist</b><small>${mine.length ? plural(mine.length, 'wish', 'wishes') + (isManaged(me) ? ' · tap to see them' : ' · tap to add or sort') : (isManaged(me) ? 'Nothing on it yet' : 'Tap here to write your first wish')}</small></span>${I.chev.replace('<svg', '<svg class="chev"')}</button>
     ${looked.length ? `<h2 class="sub">Lists you look after</h2><div class="grid">${looked.map(listCard).join('')}</div>` : ''}
     <h2 class="sub">Family wishlists</h2>
     <div class="grid">${others.map(listCard).join('')}</div>
@@ -775,13 +777,14 @@ function viewList() {
   ctx.drag = ctx.edit && items.length > 1;
   const title = owner === me ? 'My wishlist' : `${owner}'s wishlist`;
   let help = '';
-  if (owner === me) help = `<div class="shh">${I.shh}<span>No peeking! You'll never see what's been bought from your own list. ${items.length > 1 ? 'Drag the handles to put your favourites at the top.' : ''}</span></div>`;
+  if (owner === me && isManaged(me)) help = `<div class="shh">${I.star}<span>${esc(byName(me).managedBy.join(' and '))} look after your list. Tell them if you think of something new!</span></div>`;
+  else if (owner === me) help = `<div class="shh">${I.shh}<span>No peeking! You'll never see what's been bought from your own list. ${items.length > 1 ? 'Drag the handles to put your favourites at the top.' : ''}</span></div>`;
   else if (ctx.edit) help = `<div class="shh">${I.star}<span>You look after ${esc(owner)}'s list. Add wishes and drag them into order${ctx.see ? ', and you can still see what has been bought' : ''}.</span></div>`;
   else if (ctx.see) help = `<div class="shh">${I.gift}<span>Tap "I'll get this" to claim a present. Everyone else will see it's sorted, but ${esc(owner)} won't.</span></div>`;
   const list = items.length
     ? `<ul class="items" id="items">${items.map((i, k) => itemCard(i, k, ctx)).join('')}</ul>`
     : `<div class="empty">${snowmanSVG}<p class="festive" style="font-size:26px;margin:6px 0">No wishes yet</p>
-        <p>${ctx.edit ? 'Add the first one below.' : `${esc(owner)} hasn't written any wishes yet. Check back soon.`}</p></div>`;
+        <p>${ctx.edit ? 'Add the first one below.' : owner === me ? 'Nothing here yet. Check back soon!' : `${esc(owner)} hasn't written any wishes yet. Check back soon.`}</p></div>`;
   return `${topbar(S.listFrom || 'home')}
     <button class="back" data-act="nav" data-v="home">${I.back} All lists</button>
     <div class="listhead">${bauble(p, 52)}<h1>${esc(title)}</h1></div>
@@ -1006,6 +1009,7 @@ document.addEventListener('click', async (e) => {
     case 'reload': location.reload(); break;
     case 'pick': {
       const who = el.dataset.name; pop();
+      if (isManaged(who)) { finishLogin(who, NO_PIN); break; }
       S.pin = { who, stage: S.people[who]?.pinHash ? 'enter' : 'set', entry: '', first: '', err: '' };
       go('pin'); break;
     }
