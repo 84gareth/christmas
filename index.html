@@ -67,8 +67,10 @@ h1,h2,.festive{font-family:"Mountains of Christmas",Georgia,serif;font-weight:70
 .topbar{position:relative}
 .topbar .row{display:flex;align-items:center;gap:10px;margin-top:4px}
 .topbar .who{flex:1;min-width:0}
-.topbar .hello{font-family:"Mountains of Christmas",Georgia,serif;font-size:30px;line-height:1;color:#fff}
-.topbar .cd{color:var(--gold);font-weight:800;font-size:14px}
+.topbar .hello{font-family:"Mountains of Christmas",Georgia,serif;font-size:clamp(20px,6vw,30px);line-height:1.05;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .cd{color:var(--gold);font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .iconbtn{width:40px;height:40px}
+.topbar .row{gap:7px}
 .iconbtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.18)}
 .iconbtn:active{transform:scale(.92)}
 .iconbtn svg{width:22px;height:22px}
@@ -196,6 +198,14 @@ h1,h2,.festive{font-family:"Mountains of Christmas",Georgia,serif;font-weight:70
 .toggle input{width:24px;height:24px;accent-color:var(--green)}
 .big-item{background:#fff;border-radius:14px;padding:12px;margin-top:8px;font-weight:900;font-size:18px;border-left:6px solid var(--green)}
 
+/* alarm */
+#alarm{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;gap:3vw;padding:16px;cursor:pointer;animation:flash .5s steps(1) infinite}
+#alarm.on{display:flex}
+@keyframes flash{0%{background:rgba(214,30,45,.94)}50%{background:rgba(25,70,215,.94)}}
+.alarm-text{font-weight:900;font-size:clamp(34px,11vw,96px);line-height:.95;text-align:center;color:#fff;letter-spacing:2px;text-shadow:0 5px 0 #000,0 0 30px rgba(255,255,255,.6);animation:shake .3s infinite}
+.siren{width:clamp(54px,15vw,130px);flex:none;overflow:visible}
+.siren .beam{transform-origin:32px 32px;animation:spin .7s linear infinite}
+.corner{display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 -6px}
 /* toast */
 #toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));z-index:70;transform:translate(-50%,-180%);background:var(--green);color:#fff;font-weight:900;padding:12px 20px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:transform .3s cubic-bezier(.2,1.4,.5,1);max-width:calc(100% - 32px);text-align:center}
 #toast.show{transform:translate(-50%,0)}
@@ -227,12 +237,13 @@ h1,h2,.festive{font-family:"Mountains of Christmas",Georgia,serif;font-weight:70
 <div id="modal" role="dialog" aria-modal="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <canvas id="fx"></canvas>
+<div id="alarm" role="alert"></div>
 
 <script type="module">
 /* ============================================================
    The Family Christmas List
    ============================================================ */
-const VERSION = '1.1.0';
+const VERSION = '1.2.2';
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBRPZgESoFpIrDzE50Jiav6hdtLWFOoWWM",
@@ -260,11 +271,12 @@ const PEOPLE = [
   { name: 'Lily',      adult: false,                       colour: '#b15ce6' },
   { name: 'Freddy',    adult: false,                       colour: '#3fae49' },
 ];
-const TAGS = { must: 'Must have', like: 'Would like', surprise: 'Nice surprise' };
+const TAGS = { must: 'Must have', like: 'Would like', surprise: 'Nice to have' };
 
 const DEMO = new URLSearchParams(location.search).has('demo');
 const SESSION_KEY = 'xmasListMe';
 const SOUND_KEY = 'xmasListSound';
+const MUSIC_KEY = 'xmasListMusic';
 
 /* ---------- helpers ---------- */
 const $ = (s) => document.querySelector(s);
@@ -355,6 +367,8 @@ function countdownText() {
 /* ---------- icons ---------- */
 const I = {
   soundOn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>',
+  music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/></svg>',
+  musicOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/><path d="M2 2l20 20" stroke-width="2.6"/></svg>',
   soundOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m16 9 6 6M22 9l-6 6"/></svg>',
   door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8"/><path d="M10 12h11M18 8l3 4-3 4"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
@@ -476,8 +490,8 @@ function fxTick() {
 
 /* ---------- sound ---------- */
 let AC = null;
-function audio() {
-  if (!S.sound) return null;
+function audio() { return S.sound ? getAC() : null; }
+function getAC() {
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === 'suspended') AC.resume();
@@ -512,11 +526,110 @@ function jingle() {
 }
 function sadTrombone() { [392, 370, 349].forEach((f, i) => bell(f, i * .2, .6, .1)); }
 
+/* festive music: out-of-copyright carols, synthesised */
+const noteFreq = (n) => {
+  const m = n.match(/^([A-G])(#|b)?(\d)$/);
+  const st = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+  return 440 * 2 ** (((+m[3] + 1) * 12 + st - 69) / 12);
+};
+const tune = (bpm, str) => ({ bpm, seq: str.trim().split(/\s+/).map((t) => { const [n, d] = t.split(':'); return [n === 'R' ? 0 : noteFreq(n), +d]; }) });
+const TUNES = [
+  tune(150, 'E5:1 E5:1 E5:2 E5:1 E5:1 E5:2 E5:1 G5:1 C5:1.5 D5:.5 E5:4 F5:1 F5:1 F5:1.5 F5:.5 F5:1 E5:1 E5:1 E5:.5 E5:.5 E5:1 D5:1 D5:1 E5:1 D5:2 G5:2 E5:1 E5:1 E5:2 E5:1 E5:1 E5:2 E5:1 G5:1 C5:1.5 D5:.5 E5:4 F5:1 F5:1 F5:1 F5:1 F5:1 E5:1 E5:1 E5:.5 E5:.5 G5:1 G5:1 F5:1 D5:1 C5:4'),
+  tune(132, 'G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 E5:1.5 D5:.5 C5:1 B4:1 C5:2 G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 D5:.5 E5:.5 F5:.5 D5:.5 E5:1.5 D5:.5 C5:1 B4:1 C5:2 D5:1.5 E5:.5 F5:1 D5:1 E5:1.5 F5:.5 G5:1 D5:1 E5:.5 F#5:.5 G5:1 A5:.5 B5:.5 C6:1 B5:1 A5:1 G5:2 G5:1.5 F5:.5 E5:1 D5:1 C5:1 D5:1 E5:1 C5:1 A5:.5 A5:.5 A5:.5 A5:.5 G5:1.5 F5:.5 E5:1 D5:1 C5:2'),
+  tune(165, 'G4:1 C5:1 C5:.5 D5:.5 C5:.5 B4:.5 A4:1 A4:1 A4:1 D5:1 D5:.5 E5:.5 D5:.5 C5:.5 B4:1 G4:1 G4:1 E5:1 E5:.5 F5:.5 E5:.5 D5:.5 C5:1 A4:1 G4:.5 G4:.5 A4:1 D5:1 B4:1 C5:3'),
+];
+const M = { playing: false, timer: 0, t: 0, i: 0, pos: 0, next: 0, gain: null, noise: null, ticks: 0 };
+window.__music = M;
+const MUSIC_VOL = .09;
+function musicNote(a, f, t, dur) {
+  const g = a.createGain(), o1 = a.createOscillator(), o2 = a.createOscillator(), g2 = a.createGain();
+  o1.type = 'triangle'; o1.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 2; g2.gain.value = .25;
+  const end = t + Math.max(.12, dur * .92);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .012);
+  g.gain.exponentialRampToValueAtTime(.35, t + Math.min(dur * .6, .4)); g.gain.exponentialRampToValueAtTime(.0001, end + .08);
+  o1.connect(g); o2.connect(g2).connect(g); g.connect(M.gain);
+  o1.start(t); o2.start(t); o1.stop(end + .1); o2.stop(end + .1);
+}
+function shaker(a, t, accent) {
+  if (!M.noise) {
+    const b = a.createBuffer(1, a.sampleRate * .2, a.sampleRate), d = b.getChannelData(0);
+    for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+    M.noise = b;
+  }
+  const src = a.createBufferSource(), hp = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = M.noise; hp.type = 'highpass'; hp.frequency.value = 7000;
+  g.gain.setValueAtTime(accent ? .5 : .28, t); g.gain.exponentialRampToValueAtTime(.0001, t + .09);
+  src.connect(hp).connect(g).connect(M.gain); src.start(t); src.stop(t + .12);
+}
+function scheduleMusic() {
+  const a = AC; if (!a || !M.playing) return;
+  M.ticks++;
+  while (M.next < a.currentTime + .3) {
+    const T = TUNES[M.t];
+    if (M.i >= T.seq.length) { M.t = (M.t + 1) % TUNES.length; M.i = 0; M.pos = 0; M.next += .9; continue; }
+    const [f, d] = T.seq[M.i], spb = 60 / T.bpm;
+    if (f) musicNote(a, f, M.next, d * spb);
+    for (let b = Math.ceil(M.pos - 1e-6); b < M.pos + d - 1e-6; b++) shaker(a, M.next + (b - M.pos) * spb, b % 2 === 0);
+    M.pos += d; M.next += d * spb; M.i++;
+  }
+}
+function startMusic() {
+  if (M.playing || !S.music || document.hidden) return;
+  const a = getAC(); if (!a) return;
+  M.gain = a.createGain(); M.gain.gain.value = MUSIC_VOL; M.gain.connect(a.destination);
+  M.playing = true; M.next = a.currentTime + .15;
+  clearInterval(M.timer); M.timer = setInterval(scheduleMusic, 60); scheduleMusic();
+}
+function stopMusic() {
+  clearInterval(M.timer); M.playing = false;
+  const g = M.gain; M.gain = null;
+  if (g && AC) { g.gain.setTargetAtTime(.0001, AC.currentTime, .08); setTimeout(() => { try { g.disconnect(); } catch {} }, 600); }
+}
+function duckMusic(sec) {
+  if (!M.gain || !AC) return;
+  const g = M.gain.gain, t = AC.currentTime;
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(.012, t + .15);
+  g.setValueAtTime(.012, t + sec); g.linearRampToValueAtTime(MUSIC_VOL, t + sec + .6);
+}
+['pointerdown', 'keydown'].forEach((ev) => addEventListener(ev, () => startMusic(), { capture: true }));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { M.wasPlaying = M.playing; stopMusic(); }
+  else if (M.wasPlaying) startMusic();
+});
+
+/* the Robert alarm */
+function sirenSound(sec) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime;
+  const o = a.createOscillator(), lfo = a.createOscillator(), depth = a.createGain(), lp = a.createBiquadFilter(), g = a.createGain();
+  o.type = 'sawtooth'; o.frequency.value = 900;
+  lfo.type = 'triangle'; lfo.frequency.value = 1.5; depth.gain.value = 380;
+  lfo.connect(depth).connect(o.frequency);
+  lp.type = 'lowpass'; lp.frequency.value = 2600;
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.07, t + .05);
+  g.gain.setValueAtTime(.07, t + sec - .3); g.gain.exponentialRampToValueAtTime(.0001, t + sec);
+  o.connect(lp).connect(g).connect(a.destination);
+  o.start(t); lfo.start(t); o.stop(t + sec + .05); lfo.stop(t + sec + .05);
+}
+const SIREN_SVG = `<svg class="siren" viewBox="0 0 64 80" aria-hidden="true"><g class="beam"><path d="M32 32 L-40 8 L-40 56Z" fill="rgba(255,240,120,.55)"/><path d="M32 32 L104 8 L104 56Z" fill="rgba(255,240,120,.55)"/></g>
+  <path d="M14 60V36a18 18 0 0 1 36 0v24z" fill="#ff2a2a" stroke="#7a0000" stroke-width="2"/>
+  <path d="M22 38a10 10 0 0 1 10-10" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".75" fill="none"/>
+  <rect x="8" y="60" width="48" height="11" rx="3" fill="#333"/><rect x="4" y="71" width="56" height="6" rx="2" fill="#1a1a1a"/></svg>`;
+function showAlarm(withSound = true) {
+  const el = $('#alarm'); if (!el) return;
+  el.innerHTML = `${SIREN_SVG}<div class="alarm-text">TWAT<br>DETECTED</div>${SIREN_SVG}`;
+  el.classList.add('on');
+  if (withSound) { sirenSound(4); duckMusic(4.2); }
+  const hide = () => { el.classList.remove('on'); el.innerHTML = ''; };
+  el.onclick = hide; clearTimeout(showAlarm.t); showAlarm.t = setTimeout(hide, 4500);
+}
+
 /* ---------- state ---------- */
 const S = {
   view: 'loading', me: null, listOwner: null, people: {}, items: [], year: new Date().getFullYear(),
   ready: false, error: null, pin: null, dragging: false, pending: false,
   sound: (() => { try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; } })(),
+  music: (() => { try { return localStorage.getItem(MUSIC_KEY) !== 'off'; } catch { return true; } })(),
   metaChecked: false,
 };
 let store = null;
@@ -616,6 +729,7 @@ function onData(d) {
     if (!saved || (!isManaged(S.me) && S.people[S.me]?.pinHash !== saved.hash)) { S.me = null; setSession(null); S.view = 'login'; toast('Your PIN was reset. Please sign in again.', true); }
   } else if (saved && byName(saved.name) && (isManaged(saved.name) ? saved.hash === NO_PIN : S.people[saved.name]?.pinHash === saved.hash) && S.view === 'loading') {
     S.me = saved.name; S.view = 'home';
+    if (S.me === 'Robert') setTimeout(() => showAlarm(false), 400);
   }
   if (S.view === 'loading') S.view = 'login';
   S.ready = true;
@@ -660,7 +774,7 @@ function personButton(p) {
 function viewLogin() {
   const adults = PEOPLE.filter((p) => p.adult);
   const kids = PEOPLE.filter((p) => !p.adult);
-  return `${lights()}
+  return `${lights()}<div class="corner">${audioButtons()}</div>
     <h1 class="title">The Family<br>Christmas List</h1>
     <p class="countdown">${countdownHTML()}</p>
     ${errBanner()}
@@ -697,6 +811,10 @@ function viewPin() {
   </div>`;
 }
 
+function audioButtons() {
+  return `<button class="iconbtn" data-act="music" aria-label="Music ${S.music ? 'on' : 'off'}">${S.music ? I.music : I.musicOff}</button>
+      <button class="iconbtn" data-act="sound" aria-label="Sound effects ${S.sound ? 'on' : 'off'}">${S.sound ? I.soundOn : I.soundOff}</button>`;
+}
 function topbar(active) {
   const me = byName(S.me);
   const tabs = me.adult ? `<nav class="tabs">
@@ -707,7 +825,7 @@ function topbar(active) {
   return `<header class="topbar">${lights()}
     <div class="row">${bauble(me, 40)}
       <div class="who"><div class="hello">Hello, ${esc(me.name)}</div><div class="cd">${esc(countdownText())}</div></div>
-      <button class="iconbtn" data-act="sound" aria-label="Sound ${S.sound ? 'on' : 'off'}">${S.sound ? I.soundOn : I.soundOff}</button>
+      ${audioButtons()}
       <button class="iconbtn" data-act="logout" aria-label="Switch person">${I.door}</button>
     </div>${tabs}</header>${errBanner()}`;
 }
@@ -997,6 +1115,7 @@ function finishLogin(who, h) {
   chime(); go('home');
   const r = innerWidth / 2; burst(r, 120, 60);
   toast(`Merry Christmas, ${who}!`);
+  if (who === 'Robert') setTimeout(() => showAlarm(true), 350);
 }
 
 /* ---------- events ---------- */
@@ -1017,6 +1136,7 @@ document.addEventListener('click', async (e) => {
     case 'pindel': if (S.pin && !S.pin.busy) { S.pin.entry = S.pin.entry.slice(0, -1); render(); } break;
     case 'pinback': S.pin = null; go('login'); break;
     case 'logout': setSession(null); S.me = null; pop(); go('login'); break;
+    case 'music': S.music = !S.music; try { localStorage.setItem(MUSIC_KEY, S.music ? 'on' : 'off'); } catch {} if (S.music) startMusic(); else stopMusic(); render(); break;
     case 'sound': S.sound = !S.sound; try { localStorage.setItem(SOUND_KEY, S.sound ? 'on' : 'off'); } catch {} if (S.sound) chime(); render(); break;
     case 'nav': pop(); go(el.dataset.v); break;
     case 'open': pop(); go('list', { listOwner: el.dataset.owner }); break;
